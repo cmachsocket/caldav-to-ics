@@ -25,12 +25,27 @@ def export_calendar():
                               password=os.getenv("CALDAV_PWD"))
     principal = client.principal()
     import_calendar = principal.calendars()[0]
-    events = import_calendar.events()
-    print(f'Found {len(events)} calendar events.')
-    for import_event in import_calendar.events():
-        export_event = Event()
-        for subcomponent in import_event.icalendar_instance.subcomponents:
-            export_cal.add_component(subcomponent)
+    # NOTE: feishu CalDAV is partially broken in non-RFC ways:
+    #   - calendar.calendars()[0].events()  → returns 0 (their
+    #     calendar-query REPORT path is dead).
+    #   - calendar.event_by_url(href).load() → GET on the .ics
+    #     returns 403 Forbidden, so single-resource fetch is blocked.
+    #   - sync-collection REPORT and calendar-multiget REPORT both
+    #     work and return full VEVENT bodies. Use those.
+    object_urls = [obj.url for obj in import_calendar.objects()]
+    print(f'Found {len(object_urls)} calendar events.')
+    # Multiget in batches of 20 — feishu handles small batches cleanly.
+    BATCH = 20
+    for i in range(0, len(object_urls), BATCH):
+        batch = object_urls[i:i + BATCH]
+        for import_event in import_calendar.calendar_multiget(batch):
+            # feishu's multiget occasionally returns an empty body for
+            # stale/deleted event hrefs still in sync-collection. Skip them.
+            ical = import_event.icalendar_instance
+            if ical is None:
+                continue
+            for subcomponent in ical.subcomponents:
+                export_cal.add_component(subcomponent)
 
     create_folder_if_missing('out')
     f = open(os.path.join('out/calendar.ics'), 'wb')
