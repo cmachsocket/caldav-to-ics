@@ -51,5 +51,5 @@ def upload_calendar_file():
 if __name__ == '__main__':
     load_dotenv()
     export_calendar()
-    upload_calendar_file()
+    # upload_calendar_file()
 
