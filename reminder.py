@@ -3,7 +3,8 @@ from icalendar import Calendar, Event
 from desktop_notifier import DesktopNotifier, Urgency, Button
 import datetime
 import asyncio
-PATH='out/calendar.ics'
+import signal
+ICS_PATH = 'out/calendar.ics'
 def notification(summary):
     notifier = DesktopNotifier()
     asyncio.run(notifier.send(
@@ -32,9 +33,24 @@ def check_ics(path):
     pass
 scheduler = BackgroundScheduler()
 scheduler.start()
-scheduler.add_job(check_ics, 'interval', minutes=5,args=(PATH))
+scheduler.add_job(check_ics, 'interval', minutes=5, args=(ICS_PATH,))
 
 added_event = set()
 
-while True:
-    pass
+_stop = False
+
+
+def _handle_signal(signum, _frame):
+    global _stop
+    _stop = True
+
+
+signal.signal(signal.SIGINT, _handle_signal)
+signal.signal(signal.SIGTERM, _handle_signal)
+
+# signal.pause() 在收到 signal 时被 EINTR 唤醒,直接返回。
+# 比 threading.Event.wait() 靠谱 —— 后者遇到 EINTR 会自动重试,永远不退出。
+while not _stop:
+    signal.pause()
+
+scheduler.shutdown(wait=False)
